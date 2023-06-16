@@ -14,8 +14,6 @@ import random
 import time
 # キーボード入力の受付
 import readchar
-# 画面サイズの取得
-import shutil
 # nautilus の起動
 import subprocess
 
@@ -81,22 +79,21 @@ def get_args(ui = True):
     return parser.parse_args()
 
 # ディレクトリ内の動画パスをリスト型で取得
-def path2list(args, ui = False):
+def path2list(arg, ui = False):
     r_li = []
-    for arg in args:
-        if os.path.isdir(arg):
-            # 引数がディレクトリなら
-            directory = os.path.dirname(arg) + "/"
-            listdir = os.listdir(directory)
-            listdir.sort()
-            # ディレクトリの中にある動画を取り出す
-            for mov in listdir:
-                if pe.ismovie(mov, ui = False):
-                    r_li.append(directory + mov)
-        else:
-            # ディレクトリじゃないなら
-            if pe.ismovie(arg, ui = False):
-                r_li.append(arg)
+    if os.path.isdir(arg):
+        # 引数がディレクトリなら
+        directory = os.path.dirname(arg) + "/"
+        listdir = os.listdir(directory)
+        listdir.sort()
+        # ディレクトリの中にある動画を取り出す
+        for mov in listdir:
+            if pe.ismovie(mov, ui = ui):
+                r_li.append(directory + mov)
+    if os.path.isfile(arg):
+        # ディレクトリじゃないなら
+        if pe.ismovie(arg, ui = ui):
+            r_li.append(arg)
     return r_li
 
 def blackscreen(width = 256, height = 256):
@@ -134,22 +131,32 @@ def mov_show(path, ui = False):
     if not cap.isOpened():
         return 1
     # 総フレーム数
-    video_frame_count = len(str(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))))
+    video_frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps = cap.get(cv2.CAP_PROP_FPS)
     video_len_sec = video_frame_count / video_fps
+    loop = True
     previous = 0
     frame_index = 0
-    loop = True
+    processtime = 0
+    sprocesstime = 0
     while loop:
         previous = time.perf_counter()
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-        ret, frame = cap.read()
-        if ret:
-            ie.showimagecli(frame, title = path, ui = ui)
-        processtime = time.perf_counter() - start
-        frame_index = frame_index + int(video_fps * processtime)
+        if 1 / video_fps < sprocesstime:
+            frame_index = frame_index + int(round(video_fps * sprocesstime))
+            sprocesstime = 0
+        else:
+            sprocesstime = sprocesstime + processtime
+        debug = f"{video_fps} * {processtime} = int({round(video_fps * processtime)})\n"
+        # frame_index = frame_index + 1
         if frame_index >= video_frame_count:
             loop = False
+        else:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            ret, frame = cap.read()
+            title = f"{path}, {int(100*frame_index/video_frame_count): >3}, {frame_index} / {video_frame_count}\n"
+            if ret:
+                ie.showimagecli(frame, title = title + debug, ui = ui)
+        processtime = time.perf_counter() - previous
 
 # パスのリストから動画を表示する
 def list_show(li, defaultlist, fullscreen = False, ui = False):
@@ -166,7 +173,8 @@ def list_show(li, defaultlist, fullscreen = False, ui = False):
         else:
             showingmoviepath = defaultlist[index]
         prefix = f"{defaultlist.index(showingmoviepath): >4} / {len(li): <4}"
-        mov_show(showingmoviepath, fullscreen = fullscreen, prefix = prefix, ui = ui)
+        mov_show(showingmoviepath, ui = ui)
+        loop = False
 
 if __name__ == "__main__":
     optiondict, args = get_args(ui = False)
@@ -175,8 +183,8 @@ if __name__ == "__main__":
     invert = optiondict.invert
     ui = optiondict.visible or optiondict.fullscreen
     movpathlist = []
-    for dirpath in args:
-        movpathlist.extend(path2list(dirpath, ui = ui))
+    for arg in args:
+        movpathlist.extend(path2list(arg, ui = True))
     if len(movpathlist) == 0:
         print("動画はありません")
         sys.exit(0)
