@@ -115,15 +115,6 @@ def blackscreen(width = 256, height = 256):
     cv2.putText(image_, text, position, cv2.FONT_HERSHEY_PLAIN, font_size, (255, 255, 255), thickness, cv2.LINE_AA)
     return image_
 
-# 画像を読み取って解像度下げてグレイスケール化して値によって文字を変化させる
-def im_show(path, fullscreen = False, prefix = "", end = "\n", ui = False):
-    binary = cv2.imread(path)
-    if binary is None:
-        print(f"動画が開けません : {path}", end = "\n", file = sys.stderr)
-        binary = blackscreen()
-    string = f" >>> {prefix} path {end}"
-    ie.showimagecli(binary, string = string, fxy = 1 / 3, fullscreen = fullscreen, ui = ui)
-
 # 動画の再生
 def mov_show(path, ui = False):
     cap = cv2.VideoCapture(path)
@@ -139,15 +130,15 @@ def mov_show(path, ui = False):
     frame_index = 0
     processtime = 0
     sprocesstime = 0
+    # カーソルより後ろの画面消去
+    # print(f"\x1b[2J", end = "")
+    start_time = time.perf_counter()
     while loop:
-        previous = time.perf_counter()
-        if 1 / video_fps < sprocesstime:
-            frame_index = frame_index + int(round(video_fps * sprocesstime))
-            sprocesstime = 0
-        else:
-            sprocesstime = sprocesstime + processtime
-        debug = f"{video_fps} * {processtime} = int({round(video_fps * processtime)})\n"
-        # frame_index = frame_index + 1
+        # 開始からの経過時間の計算
+        sprocesstime = time.perf_counter() - start_time
+        # 経過時間から今どのフレームを表示するべきかの計算
+        frame_index = round(video_fps * sprocesstime)
+        debug = ""
         if frame_index >= video_frame_count:
             loop = False
         else:
@@ -155,8 +146,19 @@ def mov_show(path, ui = False):
             ret, frame = cap.read()
             title = f"{path}, {int(100*frame_index/video_frame_count): >3}, {frame_index} / {video_frame_count}\n"
             if ret:
-                ie.showimagecli(frame, title = title + debug, ui = ui)
-        processtime = time.perf_counter() - previous
+                # (1, 1) に移動
+                # print(f"\x1b[1;1H", end = "")
+                h, w = ie.showimagecli(frame, title = title + debug, ui = False)
+                print(f"\x1b[{h}F\r", end = "")
+        """
+        key_str = str(readchar.readkey())
+        if key_str == "q":
+            # (1, 1) に移動
+            # print(f"\x1b[1;1H", end = "")
+            # カーソルより後ろの画面消去
+            print(f"\x1b[2J", end = "")
+            loop = False
+        """
 
 # パスのリストから動画を表示する
 def list_show(li, defaultlist, fullscreen = False, ui = False):
@@ -164,7 +166,6 @@ def list_show(li, defaultlist, fullscreen = False, ui = False):
     loop = True
     count = len(li)
     default = 0
-    print(" " * 7, end = "")
     while loop:
         valid = False
         showingmoviepath = ""
@@ -184,7 +185,7 @@ if __name__ == "__main__":
     ui = optiondict.visible or optiondict.fullscreen
     movpathlist = []
     for arg in args:
-        movpathlist.extend(path2list(arg, ui = True))
+        movpathlist.extend(path2list(arg, ui = False))
     if len(movpathlist) == 0:
         print("動画はありません")
         sys.exit(0)
